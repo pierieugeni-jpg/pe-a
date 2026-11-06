@@ -65,6 +65,14 @@ export function recordarGrupo(g: GrupoReciente) {
   } catch {}
 }
 
+/** Saca el grupo de "Tus grupos" y borra la identidad guardada en este dispositivo. */
+export function olvidarGrupo(codigo: string) {
+  guardarYo(codigo, null);
+  try {
+    localStorage.setItem("pena:grupos", JSON.stringify(gruposRecientes().filter((g) => g.codigo !== codigo)));
+  } catch {}
+}
+
 // ---------- utilidades ----------
 
 export async function copiar(texto: string): Promise<boolean> {

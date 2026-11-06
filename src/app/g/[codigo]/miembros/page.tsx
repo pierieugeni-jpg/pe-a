@@ -1,7 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { api, copiar } from "@/client/api";
+import { api, copiar, olvidarGrupo } from "@/client/api";
 import { useGrupo } from "@/client/grupo";
 import { Alerta, Boton, Campo, claseInput, Encabezado, Tarjeta, useToast } from "@/client/ui";
 import type { Miembro } from "@/lib/tipos";
@@ -84,8 +85,98 @@ export default function Miembros() {
             </ul>
           </section>
         )}
+
+        <EliminarGrupo />
       </main>
     </>
+  );
+}
+
+/** Zona de administrador: borrar el grupo entero. Pide el código de administrador. */
+function EliminarGrupo() {
+  const { codigo, grupo } = useGrupo();
+  const router = useRouter();
+  const toast = useToast();
+  const [abierto, setAbierto] = useState(false);
+  const [codigoAdmin, setCodigoAdmin] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  async function eliminar(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (
+      !confirm(
+        `¿Eliminar el grupo "${grupo.nombre}"? Se borran todos sus miembros, peñas, gastos y pagos, para todos. No se puede deshacer.`,
+      )
+    ) {
+      return;
+    }
+    setEnviando(true);
+    try {
+      await api(`/g/${codigo}`, { method: "DELETE", body: { codigo_creacion: codigoAdmin } });
+      olvidarGrupo(codigo);
+      toast("Grupo eliminado");
+      router.replace("/");
+    } catch (e) {
+      setError((e as Error).message);
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <section className="pt-8">
+      {!abierto ? (
+        <Boton variante="peligro" className="w-full" onClick={() => setAbierto(true)}>
+          Eliminar grupo
+        </Boton>
+      ) : (
+        <Tarjeta className="border-red-200">
+          <form onSubmit={eliminar} className="space-y-3">
+            <h2 className="text-lg font-bold text-red-800">Eliminar grupo</h2>
+            <p className="text-sm text-stone-600">
+              Se borra <strong>{grupo.nombre}</strong> con todas sus peñas, gastos y pagos, para todos los miembros. No se puede
+              deshacer.
+            </p>
+            <Campo label="Código de administrador" ayuda="Es el mismo código que se usa para crear grupos.">
+              <input
+                className={claseInput}
+                type="password"
+                value={codigoAdmin}
+                onChange={(e) => setCodigoAdmin(e.target.value)}
+                maxLength={100}
+                required
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Campo>
+            {error && <Alerta>{error}</Alerta>}
+            <div className="flex gap-2">
+              <Boton
+                variante="secundario"
+                className="flex-1"
+                onClick={() => {
+                  setAbierto(false);
+                  setCodigoAdmin("");
+                  setError(null);
+                }}
+              >
+                Cancelar
+              </Boton>
+              <button
+                type="submit"
+                disabled={enviando}
+                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-red-700 px-4 py-2 text-base font-semibold text-white active:bg-red-800 disabled:bg-red-300"
+              >
+                {enviando ? "Eliminando…" : "Eliminar"}
+              </button>
+            </div>
+          </form>
+        </Tarjeta>
+      )}
+    </section>
   );
 }
 

@@ -44,12 +44,16 @@ export async function handle<T>(req: NextRequest, fn: (body: Record<string, unkn
   }
   try {
     let body: Record<string, unknown> = {};
-    if (req.method !== "GET" && req.method !== "DELETE") {
-      try {
-        const j = await req.json();
-        if (j && typeof j === "object" && !Array.isArray(j)) body = j;
-      } catch {
-        return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+    if (req.method !== "GET") {
+      // DELETE puede venir sin cuerpo; si trae uno, se parsea igual que en POST/PATCH.
+      const texto = await req.text();
+      if (texto.trim() || req.method !== "DELETE") {
+        try {
+          const j = JSON.parse(texto);
+          if (j && typeof j === "object" && !Array.isArray(j)) body = j;
+        } catch {
+          return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+        }
       }
     }
     const data = await fn(body);

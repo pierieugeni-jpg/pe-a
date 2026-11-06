@@ -176,6 +176,23 @@ export async function getGrupo(codigo: string): Promise<GrupoDetalle> {
   return { grupo, miembros: await miembrosDe(db.query, grupo.id) };
 }
 
+/**
+ * Elimina el grupo con todo lo que tiene (miembros, peñas, gastos, pagos).
+ * Requiere el código de administrador (CODIGO_CREACION).
+ */
+export async function borrarGrupo(codigo: string, body: Record<string, unknown>) {
+  exigirCodigoCreacion(body.codigo_creacion);
+  const db = await getDb();
+  return db.tx(async (q) => {
+    const grupo = await grupoPorCodigo(q, codigo);
+    // En orden: primero las peñas (cascada a asistencias, gastos, participantes y pagos, que referencian
+    // a los miembros) y después el grupo (cascada a miembros). Un solo delete del grupo falla por las FK.
+    await q(`delete from penas where grupo_id = $1`, [grupo.id]);
+    await q(`delete from grupos where id = $1`, [grupo.id]);
+    return { ok: true };
+  });
+}
+
 export async function crearMiembro(codigo: string, body: Record<string, unknown>): Promise<Miembro> {
   const nombre = texto(body.nombre, "el nombre", 40)!;
   const alias = texto(body.alias_cbu, "alias/CBU", 60, false);
