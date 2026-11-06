@@ -34,7 +34,13 @@ async function crearDb(): Promise<Db> {
   }
 
   const { PGlite } = await import("@electric-sql/pglite");
-  const pg = new PGlite(process.env.PGLITE_DIR || "./.data/pglite");
+  const { mkdirSync } = await import("node:fs");
+  const { resolve } = await import("node:path");
+  // PGlite falla al crear la carpeta si la ruta tiene caracteres no ASCII (ej. "App Peña"):
+  // la creamos nosotros y le pasamos la ruta absoluta.
+  const dir = resolve(process.env.PGLITE_DIR || "./.data/pglite");
+  mkdirSync(dir, { recursive: true });
+  const pg = new PGlite(dir);
   await pg.exec(SCHEMA_SQL);
   type Conn = { query: (t: string, p?: unknown[]) => Promise<{ rows: unknown[] }> };
   const q =

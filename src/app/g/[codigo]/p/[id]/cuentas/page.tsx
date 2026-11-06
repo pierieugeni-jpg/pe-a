@@ -149,30 +149,44 @@ export default function Cuentas() {
                 <th className="px-3 py-2 text-right font-medium">Saldo</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-stone-100">
-              {cuentas.personas.map((p) => (
-                <tr key={p.id} className={p.id === yo?.id ? "bg-orange-50" : ""}>
-                  <td className="px-3 py-2.5 font-medium">{quien(p.id)}</td>
-                  <td className="px-2 py-2.5 text-right tabular-nums">{formatARS(p.pagado)}</td>
-                  <td className="px-2 py-2.5 text-right tabular-nums">{formatARS(p.leToca)}</td>
-                  <td
-                    className={`px-3 py-2.5 text-right font-semibold tabular-nums ${
-                      p.saldo > 0 ? "text-green-700" : p.saldo < 0 ? "text-red-700" : "text-stone-500"
-                    }`}
-                  >
-                    {formatARS(p.saldo, { signo: true })}
-                    {p.pendiente !== p.saldo && (
-                      <div className="text-xs font-normal text-stone-500">
-                        {p.pendiente === 0 ? "saldado" : `falta ${formatARS(Math.abs(p.pendiente))}`}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-white/40">
+              {cuentas.personas.map((p) => {
+                // Fila completa: verde = le falta cobrar, roja = le falta pagar, blanca = saldado.
+                const fila =
+                  p.pendiente > 0 ? "bg-green-700 text-white" : p.pendiente < 0 ? "bg-red-700 text-white" : "bg-white text-stone-700";
+                const pendienteVisible = p.pendiente !== p.saldo;
+                return (
+                  <tr key={p.id} className={fila}>
+                    <td className="px-3 py-2.5 font-medium">
+                      {quien(p.id)}
+                      {p.pendiente !== 0 && (
+                        <div className="text-xs font-normal opacity-90">{p.pendiente > 0 ? "Cobra" : "Paga"}</div>
+                      )}
+                    </td>
+                    <td className="px-2 py-2.5 text-right tabular-nums">{formatARS(p.pagado)}</td>
+                    <td className="px-2 py-2.5 text-right tabular-nums">{formatARS(p.leToca)}</td>
+                    <td className="px-3 py-2.5 text-right font-bold tabular-nums">
+                      {formatARS(p.saldo, { signo: true })}
+                      {pendienteVisible && (
+                        <div className="text-xs font-normal opacity-90">
+                          {p.pendiente === 0 ? "saldado" : `falta ${formatARS(Math.abs(p.pendiente))}`}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-stone-500">Positivo = le deben. Negativo = debe.</p>
+        <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-stone-600">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-3 rounded-sm bg-green-700" /> Tiene que cobrar
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-3 rounded-sm bg-red-700" /> Tiene que pagar
+          </span>
+        </p>
       </section>
 
       {/* Acciones */}
