@@ -73,16 +73,16 @@ export default function Inicio() {
         <h2 className="mb-3 text-lg font-bold">Crear un grupo</h2>
         <form onSubmit={crear} className="space-y-4">
           <Campo label="Nombre del grupo">
-            <input className={claseInput} value={nombreGrupo} onChange={(e) => setNombreGrupo(e.target.value)} placeholder="Los de la facu" maxLength={60} required />
+            <input className={claseInput} value={nombreGrupo} onChange={(e) => setNombreGrupo(e.target.value)} maxLength={60} required />
           </Campo>
           <Campo label="Tu nombre">
-            <input className={claseInput} value={miNombre} onChange={(e) => setMiNombre(e.target.value)} placeholder="Juan" maxLength={40} required autoComplete="given-name" />
+            <input className={claseInput} value={miNombre} onChange={(e) => setMiNombre(e.target.value)} maxLength={40} required autoComplete="off" />
           </Campo>
           <Campo label="Tu alias o CBU (opcional)" ayuda="Para que te transfieran.">
-            <input className={claseInput} value={miAlias} onChange={(e) => setMiAlias(e.target.value)} placeholder="juan.mp" maxLength={60} autoCapitalize="none" />
+            <input className={claseInput} value={miAlias} onChange={(e) => setMiAlias(e.target.value)} maxLength={60} autoCapitalize="none" autoComplete="off" />
           </Campo>
           <Campo label="Otros amigos (opcional)" ayuda="Uno por línea. También pueden sumarse solos entrando con el link.">
-            <textarea className={`${claseInput} min-h-24`} value={otros} onChange={(e) => setOtros(e.target.value)} placeholder={"Ana\nPedro\nLucía"} />
+            <textarea className={`${claseInput} min-h-24`} value={otros} onChange={(e) => setOtros(e.target.value)} />
           </Campo>
           {error && <Alerta>{error}</Alerta>}
           <Boton type="submit" className="w-full" disabled={enviando}>
