@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, copiar } from "@/client/api";
 import { useGrupo } from "@/client/grupo";
@@ -50,6 +51,22 @@ export default function Cuentas() {
       async () => setDetalle(await api<PenaDetalle>(penaUrl, { method: "PATCH", body: { estado } })),
       estado === "cerrada" ? "Peña cerrada" : "Peña reabierta",
     );
+
+  const router = useRouter();
+
+  async function eliminar() {
+    if (!confirm(`¿Eliminar "${detalle.pena.nombre}"? Se borran sus gastos y pagos, y no se puede deshacer.`)) return;
+    setOcupado("eliminar");
+    setError(null);
+    try {
+      await api(penaUrl, { method: "DELETE" });
+      toast("Peña eliminada");
+      router.replace(`/g/${codigo}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setOcupado(null);
+    }
+  }
 
   const resumen = resumenWhatsApp(detalle.pena, cuentas, miembros);
 
@@ -202,9 +219,14 @@ export default function Cuentas() {
           Copiar resumen
         </Boton>
         {cerrada ? (
-          <Boton variante="secundario" className="w-full" disabled={ocupado !== null} onClick={() => cambiarEstado("abierta")}>
-            Reabrir peña
-          </Boton>
+          <>
+            <Boton variante="secundario" className="w-full" disabled={ocupado !== null} onClick={() => cambiarEstado("abierta")}>
+              Reabrir peña
+            </Boton>
+            <Boton variante="peligro" className="w-full" disabled={ocupado !== null} onClick={eliminar}>
+              {ocupado === "eliminar" ? "Eliminando…" : "Eliminar peña"}
+            </Boton>
+          </>
         ) : (
           <>
             <Boton className="w-full" disabled={!cuentas.saldado || ocupado !== null} onClick={() => cambiarEstado("cerrada")}>

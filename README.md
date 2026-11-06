@@ -17,7 +17,9 @@ Para probar desde el celular en la misma red: `npx next dev -H 0.0.0.0` y entrar
 ## Producción (Vercel + Supabase)
 
 1. Crear un proyecto en Supabase y copiar la connection string del **Transaction pooler** (puerto 6543).
-2. En Vercel, importar el repo y definir `DATABASE_URL` con esa string.
+2. En Vercel, importar el repo y definir `DATABASE_URL` con esa string, y `CODIGO_CREACION` con el código
+   que hay que escribir para crear un grupo (sin esa variable, en Vercel no se pueden crear grupos).
+   Entrar a un grupo existente con su link no pide el código.
 3. Las tablas se crean solas al primer pedido (o pegá `db/schema.sql` en el SQL Editor).
 
 > PGlite no sirve en Vercel (el disco no persiste): en producción `DATABASE_URL` es obligatoria.

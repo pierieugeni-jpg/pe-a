@@ -14,6 +14,7 @@ export default function Inicio() {
   const [miNombre, setMiNombre] = useState("");
   const [miAlias, setMiAlias] = useState("");
   const [otros, setOtros] = useState("");
+  const [codigoCreacion, setCodigoCreacion] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -31,7 +32,7 @@ export default function Inicio() {
     try {
       const r = await api<{ codigo: string; miembros: Miembro[] }>("/grupos", {
         method: "POST",
-        body: { nombre: nombreGrupo, miembros },
+        body: { nombre: nombreGrupo, miembros, codigo_creacion: codigoCreacion },
       });
       guardarYo(r.codigo, r.miembros[0].id);
       recordarGrupo({ codigo: r.codigo, nombre: nombreGrupo.trim() });
@@ -83,6 +84,20 @@ export default function Inicio() {
           </Campo>
           <Campo label="Otros amigos (opcional)" ayuda="Uno por línea. También pueden sumarse solos entrando con el link.">
             <textarea className={`${claseInput} min-h-24`} value={otros} onChange={(e) => setOtros(e.target.value)} />
+          </Campo>
+          <Campo label="Código para crear grupos" ayuda="Pedíselo al administrador de la app.">
+            <input
+              className={claseInput}
+              type="password"
+              value={codigoCreacion}
+              onChange={(e) => setCodigoCreacion(e.target.value)}
+              maxLength={100}
+              required
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+            />
           </Campo>
           {error && <Alerta>{error}</Alerta>}
           <Boton type="submit" className="w-full" disabled={enviando}>

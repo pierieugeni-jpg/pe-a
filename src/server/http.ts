@@ -56,7 +56,9 @@ export async function handle<T>(req: NextRequest, fn: (body: Record<string, unkn
     return NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     if (e instanceof ApiError) {
-      if (e.status === 404 && e.message === "Grupo no encontrado") contar(rate.fallidos, ip, 15 * 60_000);
+      if (e.intentoFallido || (e.status === 404 && e.message === "Grupo no encontrado")) {
+        contar(rate.fallidos, ip, 15 * 60_000);
+      }
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);

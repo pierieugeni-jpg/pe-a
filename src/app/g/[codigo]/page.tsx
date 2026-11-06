@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { api, copiar } from "@/client/api";
+import { api, copiar, guardarYo } from "@/client/api";
 import { useGrupo } from "@/client/grupo";
 import { Alerta, Boton, BotonLink, Cargando, Encabezado, EstadoBadge, Tarjeta, usePolling, useToast } from "@/client/ui";
 import { fechaLarga, formatARS } from "@/lib/montos";
@@ -31,7 +32,15 @@ export default function InicioGrupo() {
   }, [cargar]);
   usePolling(cargar, 30_000, true);
 
+  const router = useRouter();
   const link = typeof window !== "undefined" ? `${location.origin}/g/${codigo}` : "";
+
+  function cerrarSesion() {
+    if (!confirm(`¿Cerrar sesión como ${yo?.nombre}? Para volver a entrar vas a elegir quién sos de nuevo.`)) return;
+    // Solo se borra del navegador; se navega antes de tocar el estado para no rebotar a /entrar.
+    guardarYo(codigo, null);
+    router.replace("/");
+  }
 
   async function copiarLink() {
     toast((await copiar(link)) ? "Link copiado" : "No se pudo copiar");
@@ -53,9 +62,18 @@ export default function InicioGrupo() {
           </Link>
         }
         derecha={
-          <Link href={`/g/${codigo}/miembros`} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-orange-700 active:bg-orange-50">
-            Miembros
-          </Link>
+          <div className="flex shrink-0 items-center">
+            <Link href={`/g/${codigo}/miembros`} className="flex min-h-11 items-center rounded-xl px-2.5 text-sm font-semibold text-orange-700 active:bg-orange-50">
+              Miembros
+            </Link>
+            <button
+              type="button"
+              onClick={cerrarSesion}
+              className="flex min-h-11 items-center rounded-xl px-2.5 text-sm font-semibold text-stone-600 active:bg-stone-200"
+            >
+              Salir
+            </button>
+          </div>
         }
       />
       <main className="mx-auto max-w-md space-y-4 px-4 pb-seguro pt-4">

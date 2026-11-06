@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { calcularCuentas, type CuentasResultado } from "@/lib/cuentas";
 import { validarMonto } from "@/lib/montos";
 import type {
@@ -16,9 +17,30 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Suma al límite de intentos fallidos por IP (códigos inválidos). */
+    public intentoFallido = false,
   ) {
     super(message);
   }
+}
+
+/**
+ * Crear grupos requiere el código de CODIGO_CREACION (variable de entorno).
+ * Sin la variable: en local se permite (desarrollo); en Vercel se bloquea, para no dejarlo abierto por error.
+ */
+function exigirCodigoCreacion(enviado: unknown) {
+  const esperado = (process.env.CODIGO_CREACION ?? "").trim();
+  if (!esperado) {
+    if (process.env.VERCEL) {
+      throw new ApiError(503, "La creación de grupos no está habilitada todavía. Avisale al administrador.");
+    }
+    return;
+  }
+  const a = Buffer.from(typeof enviado === "string" ? enviado.trim() : "");
+  const b = Buffer.from(esperado);
+  // Comparación en tiempo constante.
+  const ok = a.length === b.length && timingSafeEqual(a, b);
+  if (!ok) throw new ApiError(403, "El código para crear grupos no es correcto. Pedíselo al administrador.", true);
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -108,6 +130,7 @@ function aMiembro(r: Record<string, unknown>): Miembro {
 // ---------- grupos y miembros ----------
 
 export async function crearGrupo(body: Record<string, unknown>) {
+  exigirCodigoCreacion(body.codigo_creacion);
   const nombre = texto(body.nombre, "el nombre del grupo", 60)!;
   const miembrosIn = Array.isArray(body.miembros) ? body.miembros : [];
   const miembros = miembrosIn.map((m: Record<string, unknown>) => ({
@@ -407,6 +430,20 @@ export async function editarPena(codigo: string, penaId: string, body: Record<st
     }
 
     return detalle(q, await penaDelGrupo(q, grupo.id, pena.id));
+  });
+}
+
+/** Borra una peña cerrada con sus asistencias, gastos y pagos (on delete cascade). */
+export async function borrarPena(codigo: string, penaId: string) {
+  const db = await getDb();
+  return db.tx(async (q) => {
+    const grupo = await grupoPorCodigo(q, codigo);
+    const pena = await penaDelGrupo(q, grupo.id, penaId, true);
+    if (pena.estado !== "cerrada") {
+      throw new ApiError(409, "Solo se pueden eliminar peñas cerradas. Cerrala primero.");
+    }
+    await q(`delete from penas where id = $1`, [pena.id]);
+    return { ok: true };
   });
 }
 
