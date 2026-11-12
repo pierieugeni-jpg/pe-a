@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { FormMiAlias } from "@/client/alias";
 import { api, copiar } from "@/client/api";
 import { useGrupo } from "@/client/grupo";
 import { usePena } from "@/client/pena";
@@ -18,6 +19,7 @@ export default function Cuentas() {
   const toast = useToast();
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cargandoAlias, setCargandoAlias] = useState(false);
   const penaUrl = `/g/${codigo}/penas/${detalle.pena.id}`;
   const quien = (id: string) => (id === yo?.id ? "Vos" : nombre(id));
 
@@ -114,6 +116,10 @@ export default function Cuentas() {
                           <span className="truncate">{alias}</span>
                           <span aria-hidden>⧉</span>
                         </Boton>
+                      ) : t.a === yo?.id ? (
+                        <Boton variante="secundario" className="min-w-0 flex-1 text-sm" onClick={() => setCargandoAlias(true)}>
+                          + Cargar mi alias
+                        </Boton>
                       ) : (
                         <span className="flex flex-1 items-center text-sm text-stone-400">{nombre(t.a)} no cargó alias</span>
                       )}
@@ -121,6 +127,11 @@ export default function Cuentas() {
                         {ocupado === clave ? "…" : "Marcar pagada"}
                       </Boton>
                     </div>
+                    {cargandoAlias && t.a === yo?.id && !alias && (
+                      <div className="mt-3">
+                        <FormMiAlias onListo={() => setCargandoAlias(false)} onCancelar={() => setCargandoAlias(false)} />
+                      </div>
+                    )}
                   </Tarjeta>
                 </li>
               );

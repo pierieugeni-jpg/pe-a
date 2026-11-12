@@ -10,7 +10,12 @@ import { centavosATexto, formatARS, parseMonto, validarMonto } from "@/lib/monto
 
 const SUGERENCIAS = ["Carne", "Bebidas", "Vino", "Carbón", "Pan", "Hielo", "Verdura", "Postre"];
 
-/** P4 · Formulario de gasto (nuevo o edición) */
+interface Fila {
+  descripcion: string;
+  monto: string;
+}
+
+/** P4 · Formulario de gasto (nuevo o edición). Un gasto puede tener varios conceptos del mismo ticket. */
 export default function FormGasto() {
   const { gid } = useParams<{ gid: string }>();
   const { codigo, nombre, yo } = useGrupo();
@@ -26,8 +31,11 @@ export default function FormGasto() {
     [detalle.asistentes, nombre],
   );
 
-  const [montoTxt, setMontoTxt] = useState(gasto ? centavosATexto(gasto.monto_centavos) : "");
-  const [descripcion, setDescripcion] = useState(gasto?.descripcion ?? "");
+  const [filas, setFilas] = useState<Fila[]>(() =>
+    gasto?.conceptos
+      ? gasto.conceptos.map((c) => ({ descripcion: c.descripcion, monto: centavosATexto(c.monto_centavos) }))
+      : [{ descripcion: gasto?.descripcion ?? "", monto: gasto ? centavosATexto(gasto.monto_centavos) : "" }],
+  );
   const [pagadoPor, setPagadoPor] = useState(
     gasto?.pagado_por ?? (yo && detalle.asistentes.includes(yo.id) ? yo.id : (asistentes[0] ?? "")),
   );
@@ -46,7 +54,9 @@ export default function FormGasto() {
     );
   }
 
-  const centavos = parseMonto(montoTxt);
+  const varios = filas.length > 1;
+  const montos = filas.map((f) => parseMonto(f.monto));
+  const total = montos.every((m) => m !== null) ? montos.reduce<number>((s, m) => s + m!, 0) : null;
   const elegidos = participantes.filter((p) => detalle.asistentes.includes(p));
   const todos = elegidos.length === detalle.asistentes.length;
 
@@ -54,17 +64,39 @@ export default function FormGasto() {
     setParticipantes((x) => (x.includes(id) ? x.filter((p) => p !== id) : [...x, id]));
   }
 
+  const cambiar = (i: number, campo: keyof Fila, valor: string) =>
+    setFilas((fs) => fs.map((f, j) => (j === i ? { ...f, [campo]: valor } : f)));
+  // Cada concepto admite hasta 40 caracteres (la descripción de un gasto simple, 60).
+  const agregar = (descripcion = "") =>
+    setFilas((fs) => [...fs.map((f) => ({ ...f, descripcion: f.descripcion.slice(0, 40) })), { descripcion, monto: "" }]);
+  const quitar = (i: number) => setFilas((fs) => fs.filter((_, j) => j !== i));
+
+  function sugerir(s: string) {
+    if (!varios) return cambiar(0, "descripcion", s);
+    // Con varios conceptos: completa el último sin nombre, o agrega uno nuevo.
+    const vacia = filas.findIndex((f) => !f.descripcion.trim());
+    if (vacia >= 0) cambiar(vacia, "descripcion", s);
+    else agregar(s);
+  }
+
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const errMonto = montoTxt.trim() === "" ? "Poné el monto" : validarMonto(centavos);
-    if (errMonto) return setError(errMonto);
-    if (!descripcion.trim()) return setError("Poné una descripción");
+    for (const [i, f] of filas.entries()) {
+      const cual = varios ? ` del concepto ${i + 1}` : "";
+      const errMonto = f.monto.trim() === "" ? `Poné el monto${cual}` : validarMonto(montos[i]);
+      if (errMonto) return setError(varios && f.monto.trim() !== "" ? `${errMonto}${cual}` : errMonto);
+      if (!f.descripcion.trim()) return setError(varios ? `Poné qué es el concepto ${i + 1}` : "Poné una descripción");
+    }
+    const errTotal = validarMonto(total);
+    if (errTotal) return setError(errTotal);
     if (elegidos.length === 0) return setError("Elegí al menos una persona para dividir el gasto");
     setEnviando(true);
     const body = {
-      monto_centavos: centavos,
-      descripcion,
+      monto_centavos: total,
+      // Con varios conceptos la descripción la arma el servidor ("Carne, Vino, Hielo").
+      descripcion: varios ? undefined : filas[0].descripcion,
+      conceptos: varios ? filas.map((f, i) => ({ descripcion: f.descripcion, monto_centavos: montos[i] })) : null,
       pagado_por: pagadoPor,
       participantes: todos ? null : elegidos,
       creado_por: yo?.id,
@@ -95,7 +127,22 @@ export default function FormGasto() {
     }
   }
 
-  const parte = centavos && elegidos.length ? Math.floor(centavos / elegidos.length) : 0;
+  const parte = total && elegidos.length ? Math.floor(total / elegidos.length) : 0;
+
+  const chips = (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {SUGERENCIAS.map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => sugerir(s)}
+          className="min-h-9 rounded-full border border-stone-300 bg-white px-3 text-sm text-stone-700 active:bg-stone-100"
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <>
@@ -105,40 +152,95 @@ export default function FormGasto() {
           <Alerta tipo="info">La peña está cerrada. Reabrila desde Cuentas para cargar o editar gastos.</Alerta>
         ) : (
           <form onSubmit={guardar} className="space-y-5">
-            <Campo label="Monto">
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-2xl font-bold text-stone-400">$</span>
-                <input
-                  className={`${claseInput} min-h-14 pl-8 text-2xl font-bold`}
-                  inputMode="decimal"
-                  autoComplete="off"
-                  placeholder="0"
-                  value={montoTxt}
-                  onChange={(e) => setMontoTxt(e.target.value)}
-                  autoFocus={esNuevo}
-                  aria-invalid={montoTxt !== "" && centavos === null}
-                />
-              </div>
-              {montoTxt !== "" && centavos === null && <span className="mt-1 block text-xs text-red-700">Escribilo así: 12.500 o 12500,50</span>}
-            </Campo>
+            {!varios ? (
+              <>
+                <Campo label="Monto">
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-2xl font-bold text-stone-400">$</span>
+                    <input
+                      className={`${claseInput} min-h-14 pl-8 text-2xl font-bold`}
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="0"
+                      value={filas[0].monto}
+                      onChange={(e) => cambiar(0, "monto", e.target.value)}
+                      autoFocus={esNuevo}
+                      aria-invalid={filas[0].monto !== "" && montos[0] === null}
+                    />
+                  </div>
+                  {filas[0].monto !== "" && montos[0] === null && (
+                    <span className="mt-1 block text-xs text-red-700">Escribilo así: 12.500 o 12500,50</span>
+                  )}
+                </Campo>
 
-            <Campo label="Descripción" ayuda={`${descripcion.length}/60`}>
-              <input className={claseInput} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} maxLength={60} placeholder="Carne" enterKeyHint="done" />
-              {esNuevo && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {SUGERENCIAS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setDescripcion(s)}
-                      className="min-h-9 rounded-full border border-stone-300 bg-white px-3 text-sm text-stone-700 active:bg-stone-100"
-                    >
-                      {s}
-                    </button>
+                <Campo label="Descripción" ayuda={`${filas[0].descripcion.length}/60`}>
+                  <input
+                    className={claseInput}
+                    value={filas[0].descripcion}
+                    onChange={(e) => cambiar(0, "descripcion", e.target.value)}
+                    maxLength={60}
+                    placeholder="Carne"
+                    enterKeyHint="done"
+                  />
+                  {esNuevo && chips}
+                </Campo>
+
+                <button
+                  type="button"
+                  onClick={() => agregar()}
+                  className="-mt-2 min-h-11 text-sm font-semibold text-orange-700"
+                >
+                  + Agregar otro concepto al mismo ticket
+                </button>
+              </>
+            ) : (
+              <fieldset>
+                <legend className="mb-2 text-sm font-medium text-stone-700">Conceptos</legend>
+                <ul className="space-y-2">
+                  {filas.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <input
+                        className={`${claseInput} min-w-0 flex-1`}
+                        value={f.descripcion}
+                        onChange={(e) => cambiar(i, "descripcion", e.target.value)}
+                        maxLength={40}
+                        placeholder={`Concepto ${i + 1}`}
+                        aria-label={`Concepto ${i + 1}`}
+                      />
+                      <div className="relative w-32 shrink-0">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400">$</span>
+                        <input
+                          className={`${claseInput} pl-7 text-right font-semibold`}
+                          inputMode="decimal"
+                          autoComplete="off"
+                          placeholder="0"
+                          value={f.monto}
+                          onChange={(e) => cambiar(i, "monto", e.target.value)}
+                          aria-label={`Monto del concepto ${i + 1}`}
+                          aria-invalid={f.monto !== "" && montos[i] === null}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => quitar(i)}
+                        className="flex min-h-11 w-9 shrink-0 items-center justify-center rounded-xl text-xl text-stone-400 active:bg-stone-100"
+                        aria-label={`Quitar concepto ${i + 1}`}
+                      >
+                        ×
+                      </button>
+                    </li>
                   ))}
+                </ul>
+                <button type="button" onClick={() => agregar()} className="mt-1 min-h-11 text-sm font-semibold text-orange-700">
+                  + Agregar concepto
+                </button>
+                {chips}
+                <div className="mt-3 flex items-baseline justify-between rounded-xl bg-orange-50 px-3 py-2">
+                  <span className="text-sm font-medium text-stone-700">Total del ticket</span>
+                  <span className="text-2xl font-bold">{total !== null ? formatARS(total) : "—"}</span>
                 </div>
-              )}
-            </Campo>
+              </fieldset>
+            )}
 
             <Campo label="¿Quién pagó?">
               <select className={claseInput} value={pagadoPor} onChange={(e) => setPagadoPor(e.target.value)}>

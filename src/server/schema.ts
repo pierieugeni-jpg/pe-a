@@ -46,6 +46,8 @@ create table if not exists gastos (
   editado_en timestamptz
 );
 create index if not exists gastos_pena on gastos (pena_id);
+-- Detalle opcional del gasto: [{descripcion, monto_centavos}, ...]; la suma es monto_centavos.
+alter table gastos add column if not exists conceptos jsonb;
 
 create table if not exists gasto_participantes (
   gasto_id uuid not null references gastos(id) on delete cascade,

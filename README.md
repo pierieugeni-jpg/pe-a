@@ -52,5 +52,10 @@ Para probar desde el celular en la misma red: `npx next dev -H 0.0.0.0` y entrar
 - **Cerrar** solo se permite con todo saldado; una peña cerrada tampoco acepta marcar o desmarcar pagos.
 - **Límite por IP**: 240 pedidos por minuto y 20 códigos de grupo inválidos cada 15 minutos. Es en memoria:
   en serverless cada instancia lleva su propia cuenta.
+- **Mínimo de transferencias**: se parte a la gente en la mayor cantidad posible de grupos cuyos saldos suman 0
+  (programación dinámica, hasta 16 personas con saldo; con más, greedy) y cada grupo se salda aparte.
+- **Alias**: cada uno carga solo el suyo (el navegador manda quién es en `editado_por`; no hay login).
+- **Conceptos**: un gasto puede tener varios conceptos del mismo ticket (columna `conceptos` jsonb). Mismo pagador y
+  misma división; el monto es la suma y la descripción se arma con los nombres.
 - El código de acceso tiene 12 caracteres aleatorios (31 símbolos, ~59 bits).
 - Íconos: `npm run icons` los regenera (`scripts/generar-iconos.mjs`).

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { FormMiAlias } from "@/client/alias";
 import { api, copiar, guardarYo } from "@/client/api";
 import { useGrupo } from "@/client/grupo";
 import { Alerta, Boton, BotonLink, Cargando, Encabezado, EstadoBadge, Tarjeta, usePolling, useToast } from "@/client/ui";
@@ -88,6 +89,14 @@ export default function InicioGrupo() {
                 Copiar link
               </Boton>
             </div>
+          </Tarjeta>
+        )}
+
+        {yo && !yo.alias_cbu && (
+          <Tarjeta className="border-amber-200 bg-amber-50">
+            <p className="mb-1 font-semibold">Cargá tu alias o CBU</p>
+            <p className="mb-3 text-sm text-stone-600">Así los demás pueden copiarlo cuando te tengan que transferir.</p>
+            <FormMiAlias />
           </Tarjeta>
         )}
 

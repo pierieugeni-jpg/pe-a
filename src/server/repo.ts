@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { calcularCuentas, type CuentasResultado } from "@/lib/cuentas";
 import { validarMonto } from "@/lib/montos";
 import type {
+  Concepto,
   Gasto,
   Grupo,
   GrupoDetalle,
@@ -221,6 +222,8 @@ export async function editarMiembro(codigo: string, id: string, body: Record<str
     sets.push(`nombre = $${params.length}`);
   }
   if ("alias_cbu" in body) {
+    // Cada uno carga su propio alias (el navegador manda quién es; no hay login, alcanza para evitar errores).
+    if (body.editado_por !== id) throw new ApiError(403, "Cada uno puede cambiar solo su propio alias");
     params.push(texto(body.alias_cbu, "alias/CBU", 60, false));
     sets.push(`alias_cbu = $${params.length}`);
   }
@@ -268,7 +271,7 @@ async function validarMiembrosDelGrupo(q: Query, grupoId: string, ids: string[])
 async function detalle(q: Query, pena: Pena): Promise<PenaDetalle> {
   const asis = await q(`select miembro_id from asistencias where pena_id = $1`, [pena.id]);
   const gastos = await q(
-    `select id, pagado_por, monto_centavos, descripcion, creado_por, creado_en, editado_en
+    `select id, pagado_por, monto_centavos, descripcion, conceptos, creado_por, creado_en, editado_en
        from gastos where pena_id = $1 order by creado_en desc, id`,
     [pena.id],
   );
@@ -294,6 +297,7 @@ async function detalle(q: Query, pena: Pena): Promise<PenaDetalle> {
         pagado_por: String(g.pagado_por),
         monto_centavos: Number(g.monto_centavos),
         descripcion: String(g.descripcion),
+        conceptos: leerConceptos(g.conceptos),
         participantes: porGasto.get(String(g.id)) ?? null,
         creado_por: (g.creado_por as string) ?? null,
         creado_en: iso(g.creado_en),
@@ -470,12 +474,41 @@ interface GastoValidado {
   pagado_por: string;
   monto_centavos: number;
   descripcion: string;
+  conceptos: Concepto[] | null;
   participantes: string[] | null;
 }
 
+function leerConceptos(v: unknown): Concepto[] | null {
+  const arr = typeof v === "string" ? JSON.parse(v) : v;
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  return arr.map((c) => ({ descripcion: String(c.descripcion), monto_centavos: Number(c.monto_centavos) }));
+}
+
+const MAX_CONCEPTOS = 30;
+
+/** Con 2 o más conceptos el total es la suma; con 1 (o ninguno) es un gasto común. */
+function validarConceptos(v: unknown): Concepto[] | null {
+  if (v === undefined || v === null) return null;
+  if (!Array.isArray(v)) throw new ApiError(400, "Conceptos inválidos");
+  if (v.length > MAX_CONCEPTOS) throw new ApiError(400, `Máximo ${MAX_CONCEPTOS} conceptos por gasto`);
+  const lista = v.map((c: Record<string, unknown>, i) => ({
+    descripcion: texto(c?.descripcion, `la descripción del concepto ${i + 1}`, 40)!,
+    monto_centavos: centavos(c?.monto_centavos),
+  }));
+  return lista.length >= 2 ? lista : null;
+}
+
+function resumirConceptos(c: Concepto[]): string {
+  const s = c.map((x) => x.descripcion).join(", ");
+  return s.length <= 60 ? s : s.slice(0, 59).trimEnd() + "…";
+}
+
 function validarGasto(body: Record<string, unknown>, asistentes: string[]): GastoValidado {
-  const monto = centavos(body.monto_centavos);
-  const descripcion = texto(body.descripcion, "la descripción", 60)!;
+  const conceptos = validarConceptos(body.conceptos);
+  const monto = conceptos ? centavos(conceptos.reduce((s, c) => s + c.monto_centavos, 0)) : centavos(body.monto_centavos);
+  const descripcion = conceptos
+    ? (texto(body.descripcion, "la descripción", 60, false) ?? resumirConceptos(conceptos))
+    : texto(body.descripcion, "la descripción", 60)!;
   const pagadoPor = uuid(body.pagado_por, "quién pagó");
   if (!asistentes.includes(pagadoPor)) throw new ApiError(400, "Quien pagó tiene que ser asistente de la peña");
   let participantes: string[] | null = null;
@@ -488,7 +521,7 @@ function validarGasto(body: Record<string, unknown>, asistentes: string[]): Gast
     // Si participan todos, se guarda como "todos" para que incluya a los que se sumen después.
     if (asistentes.every((id) => participantes!.includes(id))) participantes = null;
   }
-  return { pagado_por: pagadoPor, monto_centavos: monto, descripcion, participantes };
+  return { pagado_por: pagadoPor, monto_centavos: monto, descripcion, conceptos, participantes };
 }
 
 async function guardarParticipantes(q: Query, gastoId: string, participantes: string[] | null) {
@@ -509,8 +542,9 @@ export async function crearGasto(codigo: string, penaId: string, body: Record<st
     const creadoPor = body.creado_por ? uuid(body.creado_por, "creado_por") : null;
     if (creadoPor) await validarMiembrosDelGrupo(q, grupo.id, [creadoPor]);
     const [r] = await q(
-      `insert into gastos (pena_id, pagado_por, monto_centavos, descripcion, creado_por) values ($1, $2, $3, $4, $5) returning id`,
-      [pena.id, g.pagado_por, g.monto_centavos, g.descripcion, creadoPor],
+      `insert into gastos (pena_id, pagado_por, monto_centavos, descripcion, conceptos, creado_por)
+       values ($1, $2, $3, $4, $5::jsonb, $6) returning id`,
+      [pena.id, g.pagado_por, g.monto_centavos, g.descripcion, g.conceptos ? JSON.stringify(g.conceptos) : null, creadoPor],
     );
     await guardarParticipantes(q, String(r.id), g.participantes);
     return { id: String(r.id) };
@@ -536,8 +570,9 @@ export async function editarGasto(codigo: string, gastoId: string, body: Record<
     const asis = (await q(`select miembro_id from asistencias where pena_id = $1`, [pena.id])).map((r) => String(r.miembro_id));
     const g = validarGasto(body, asis);
     await q(
-      `update gastos set pagado_por = $2, monto_centavos = $3, descripcion = $4, editado_en = now() where id = $1`,
-      [gasto.id, g.pagado_por, g.monto_centavos, g.descripcion],
+      `update gastos set pagado_por = $2, monto_centavos = $3, descripcion = $4, conceptos = $5::jsonb, editado_en = now()
+        where id = $1`,
+      [gasto.id, g.pagado_por, g.monto_centavos, g.descripcion, g.conceptos ? JSON.stringify(g.conceptos) : null],
     );
     await guardarParticipantes(q, gasto.id, g.participantes);
     return { id: gasto.id };

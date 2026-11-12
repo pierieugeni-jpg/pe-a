@@ -24,11 +24,19 @@ export interface Pena {
   creado_por: string | null;
 }
 
+export interface Concepto {
+  descripcion: string;
+  monto_centavos: number;
+}
+
 export interface Gasto {
   id: string;
   pagado_por: string;
+  /** Total del gasto (si hay conceptos, es su suma). */
   monto_centavos: number;
   descripcion: string;
+  /** Detalle del ticket; null = un solo concepto (la descripción). Mismo pagador y misma división. */
+  conceptos: Concepto[] | null;
   /** null = entre todos los asistentes */
   participantes: string[] | null;
   creado_por: string | null;

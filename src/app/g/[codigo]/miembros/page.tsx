@@ -187,13 +187,16 @@ function FormMiembro({ miembro, onListo, onDesactivar }: { miembro?: Miembro; on
   const [alias, setAlias] = useState(miembro?.alias_cbu ?? "");
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const esYo = !!miembro && miembro.id === yo?.id;
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setEnviando(true);
     try {
-      const body = { nombre, alias_cbu: alias || null };
+      // El alias solo lo puede cambiar su dueño.
+      const body: Record<string, unknown> = { nombre };
+      if (esYo) Object.assign(body, { alias_cbu: alias.trim() || null, editado_por: yo!.id });
       if (miembro) await api(`/g/${codigo}/miembros/${miembro.id}`, { method: "PATCH", body });
       else await api(`/g/${codigo}/miembros`, { method: "POST", body });
       await recargar();
@@ -211,9 +214,15 @@ function FormMiembro({ miembro, onListo, onDesactivar }: { miembro?: Miembro; on
         <Campo label="Nombre">
           <input className={claseInput} value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={40} required autoFocus />
         </Campo>
-        <Campo label="Alias o CBU (opcional)">
-          <input className={claseInput} value={alias} onChange={(e) => setAlias(e.target.value)} maxLength={60} autoCapitalize="none" />
-        </Campo>
+        {esYo ? (
+          <Campo label="Tu alias o CBU (opcional)">
+            <input className={claseInput} value={alias} onChange={(e) => setAlias(e.target.value)} maxLength={60} autoCapitalize="none" />
+          </Campo>
+        ) : (
+          <p className="text-sm text-stone-500">
+            {miembro ? `El alias lo carga ${miembro.nombre} desde su celular.` : "El alias lo carga cada uno desde su celular."}
+          </p>
+        )}
         {error && <Alerta>{error}</Alerta>}
         <div className="flex gap-2">
           <Boton variante="secundario" className="flex-1" onClick={onListo}>

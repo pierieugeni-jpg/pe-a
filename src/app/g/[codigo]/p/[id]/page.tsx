@@ -68,6 +68,11 @@ export default function GastosPena() {
                 <>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold">{g.descripcion}</div>
+                    {g.conceptos && (
+                      <div className="text-sm text-stone-600">
+                        {g.conceptos.map((c) => `${c.descripcion} ${formatARS(c.monto_centavos)}`).join(" · ")}
+                      </div>
+                    )}
                     <div className="truncate text-sm text-stone-500">
                       Pagó {g.pagado_por === yo?.id ? "vos" : nombre(g.pagado_por)}
                       {excluidos.length > 0 && ` · sin ${excluidos.map(nombre).join(", ")}`}
