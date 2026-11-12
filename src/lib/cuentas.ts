@@ -136,12 +136,74 @@ export function calcularCuentas({ asistentes, gastos, pagos }: CuentasInput): Cu
   };
 }
 
+type SaldoIn = { id: string; nombre: string; saldo: number };
+
+/** Hasta cuántas personas con saldo se busca el mínimo exacto (2^n combinaciones). Más que eso: greedy. */
+const MAX_EXACTO = 16;
+
 /**
- * Algoritmo greedy: el mayor deudor le transfiere al mayor acreedor el menor de los dos montos,
+ * Transferencias sugeridas con la menor cantidad posible.
+ *
+ * Un grupo de k personas cuyos saldos suman 0 se salda con k − 1 transferencias, así que el mínimo
+ * total es n − (cantidad máxima de grupos que suman 0 en los que se puede partir a la gente).
+ * Se busca esa partición con programación dinámica sobre subconjuntos y cada grupo se salda con
+ * el greedy. Ej.: +10, +5, −10, −5 → 2 transferencias (el greedy solo, en otros casos, hace más).
+ *
+ * Orden del resultado: monto de mayor a menor, después alfabético. Siempre da lo mismo para los mismos datos.
+ */
+export function sugerirTransferencias(saldos: SaldoIn[]): Transferencia[] {
+  const conSaldo = saldos.filter((s) => s.saldo !== 0).sort(compararPersonas);
+  const n = conSaldo.length;
+  if (n === 0) return [];
+
+  let grupos: SaldoIn[][];
+  if (n > MAX_EXACTO) {
+    grupos = [conSaldo];
+  } else {
+    const total = 1 << n;
+    const suma = new Float64Array(total);
+    const mejor = new Int8Array(total);
+    const ultimo = new Int8Array(total);
+    for (let mask = 1; mask < total; mask++) {
+      const bajo = 31 - Math.clz32(mask & -mask);
+      suma[mask] = suma[mask & (mask - 1)] + conSaldo[bajo].saldo;
+      let b = -1;
+      for (let i = 0; i < n; i++) {
+        if (mask & (1 << i) && mejor[mask ^ (1 << i)] > b) {
+          b = mejor[mask ^ (1 << i)];
+          ultimo[mask] = i;
+        }
+      }
+      mejor[mask] = b + (suma[mask] === 0 ? 1 : 0);
+    }
+    // Reconstruir: sacando de a una persona, cada vez que lo que queda suma 0 se cierra un grupo.
+    grupos = [];
+    let actual: SaldoIn[] = [];
+    for (let mask = total - 1; mask > 0; ) {
+      const i = ultimo[mask];
+      actual.push(conSaldo[i]);
+      mask ^= 1 << i;
+      if (suma[mask] === 0) {
+        grupos.push(actual);
+        actual = [];
+      }
+    }
+  }
+
+  const res = grupos.flatMap(greedy);
+  const nombre = new Map(conSaldo.map((s) => [s.id, s]));
+  return res.sort(
+    (x, y) =>
+      y.monto - x.monto || compararPersonas(nombre.get(x.de)!, nombre.get(y.de)!) || compararPersonas(nombre.get(x.a)!, nombre.get(y.a)!),
+  );
+}
+
+/**
+ * Greedy: el mayor deudor le transfiere al mayor acreedor el menor de los dos montos,
  * se descuenta, se saca al que quedó en 0 y se repite. Máximo (n − 1) transferencias.
  * Empates: orden alfabético, para que el resultado sea siempre el mismo.
  */
-export function sugerirTransferencias(saldos: { id: string; nombre: string; saldo: number }[]): Transferencia[] {
+function greedy(saldos: SaldoIn[]): Transferencia[] {
   const deudores = saldos.filter((s) => s.saldo < 0).map((s) => ({ ...s, resto: -s.saldo }));
   const acreedores = saldos.filter((s) => s.saldo > 0).map((s) => ({ ...s, resto: s.saldo }));
   const orden = (a: { resto: number } & PersonaInput, b: { resto: number } & PersonaInput) =>

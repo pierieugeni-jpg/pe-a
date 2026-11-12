@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularCuentas, dividirMonto, type GastoInput, type PagoInput } from "./cuentas";
+import { calcularCuentas, dividirMonto, sugerirTransferencias, type GastoInput, type PagoInput } from "./cuentas";
 import { formatARS, parseMonto } from "./montos";
 import { resumenWhatsApp } from "./resumen";
 
@@ -122,6 +122,62 @@ describe("calcularCuentas", () => {
     // Lucía debía 18.000 y transfirió 20.000: ahora Juan le devuelve 2.000.
     expect(r.personas.find((p) => p.id === "l")!.pendiente).toBe($(2000));
     expect(r.personas.reduce((s, p) => s + p.pendiente, 0)).toBe(0);
+  });
+
+  it("usa el mínimo de transferencias aunque el greedy haga más", () => {
+    const saldos = [
+      { id: "a", nombre: "A", saldo: 4 },
+      { id: "b", nombre: "B", saldo: 5 },
+      { id: "c", nombre: "C", saldo: -4 },
+      { id: "d", nombre: "D", saldo: -3 },
+      { id: "e", nombre: "E", saldo: -3 },
+      { id: "f", nombre: "F", saldo: 1 },
+    ];
+    // {A,C} y {B,D,E,F} → 1 + 3 = 4 transferencias; el greedy de antes daba 5.
+    const t = sugerirTransferencias(saldos);
+    expect(t).toHaveLength(4);
+    const neto = new Map(saldos.map((s) => [s.id, s.saldo]));
+    for (const x of t) {
+      neto.set(x.de, neto.get(x.de)! + x.monto);
+      neto.set(x.a, neto.get(x.a)! - x.monto);
+    }
+    expect([...neto.values()].every((v) => v === 0)).toBe(true);
+  });
+
+  it("nunca usa más transferencias que el mínimo por fuerza bruta (aleatorio)", () => {
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    for (let caso = 0; caso < 200; caso++) {
+      const n = 2 + Math.floor(rnd() * 7);
+      const vals = Array.from({ length: n - 1 }, () => Math.floor(rnd() * 9) - 4);
+      vals.push(-vals.reduce((s, v) => s + v, 0));
+      const saldos = vals.map((saldo, i) => ({ id: `p${i}`, nombre: `P${i}`, saldo }));
+      const t = sugerirTransferencias(saldos);
+      // Mínimo = (#no cero) − (máx. grupos que suman 0), calculado por fuerza bruta.
+      const nz = vals.filter((v) => v !== 0);
+      const memo = new Map<number, number>();
+      const maxGrupos = (mask: number): number => {
+        if (mask === 0) return 0;
+        if (memo.has(mask)) return memo.get(mask)!;
+        let best = 0;
+        for (let sub = mask; sub; sub = (sub - 1) & mask) {
+          if (!(sub & (mask & -mask))) continue;
+          let s = 0;
+          for (let i = 0; i < nz.length; i++) if (sub & (1 << i)) s += nz[i];
+          if (s === 0) best = Math.max(best, 1 + maxGrupos(mask ^ sub));
+        }
+        memo.set(mask, best);
+        return best;
+      };
+      expect(t).toHaveLength(nz.length - maxGrupos((1 << nz.length) - 1));
+      const neto = new Map(saldos.map((s) => [s.id, s.saldo]));
+      for (const x of t) {
+        expect(x.monto).toBeGreaterThan(0);
+        neto.set(x.de, neto.get(x.de)! + x.monto);
+        neto.set(x.a, neto.get(x.a)! - x.monto);
+      }
+      expect([...neto.values()].every((v) => v === 0)).toBe(true);
+    }
   });
 
   it("peña sin gastos está saldada", () => {
